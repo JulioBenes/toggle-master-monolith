@@ -1,284 +1,190 @@
-# ToggleMaster - Documento de Entrega
+# Tech Challenge – Fase 2: Deploy da Plataforma ToggleMaster na AWS
 
-## Aluno
+## Autor
 
-**Nome:** Julio Victor Benes Damasceno
+Julio Victor Benes Damasceno
 
 ---
 
 # Objetivo
 
-Esta implementação consiste em uma API REST para gerenciamento de Feature Flags utilizando:
+O objetivo desta etapa foi realizar o deploy da aplicação **ToggleMaster** em ambiente de nuvem utilizando serviços da AWS, substituindo o banco de dados executado em container Docker por um banco gerenciado no **Amazon RDS PostgreSQL**.
 
-- Flask
-- PostgreSQL
-- Docker
-- Docker Compose
-
-A aplicação permite criar, consultar e atualizar Feature Flags persistidas em banco de dados PostgreSQL.
+Além disso, a aplicação foi disponibilizada publicamente através de uma instância **Amazon EC2**, executando em containers Docker e utilizando **Gunicorn** como servidor de aplicação.
 
 ---
 
 # Tecnologias Utilizadas
 
-- Python 3.9
-- Flask
-- PostgreSQL 13
-- psycopg2
-- Gunicorn
+- Amazon EC2
+- Amazon RDS PostgreSQL
 - Docker
 - Docker Compose
+- Python 3
+- Flask
+- Gunicorn
+- PostgreSQL
+- GitHub
+- Draw.io
+- AWS Pricing Calculator
 
 ---
 
-## Estrutura do Projeto
+# Estrutura do Projeto
 
-```
-toggle-master-monolith/
-│
-├── .gitignore
-├── app.py
-├── docker-compose.yaml
-├── Dockerfile
-├── ENTREGA.md
-├── entrypoint.sh
-├── README.md
-└── requirements.txt
-```
+O projeto é composto por uma aplicação Flask responsável pelo gerenciamento de Feature Flags.
+
+A aplicação é executada através do Gunicorn dentro de um container Docker e realiza toda a comunicação com um banco PostgreSQL hospedado no Amazon RDS.
+
+O código-fonte encontra-se versionado no GitHub.
 
 ---
 
-# Arquitetura
+# Arquitetura da Solução
 
-A solução é composta por dois containers:
+> https://drive.google.com/file/d/1nxF65WQhUFYISJOR_c4BHPAtsYDt934-/view?usp=sharing
 
-## App
+A arquitetura implementada é composta por:
 
-Container responsável pela API Flask.
+- Internet
+- Internet Gateway
+- Amazon VPC
+- Public Subnet
+- Private Subnet
+- Amazon EC2
+- Amazon RDS PostgreSQL
 
-Responsabilidades:
+A comunicação ocorre da seguinte forma:
 
-- receber requisições HTTP
-- conectar ao PostgreSQL
-- criar a tabela automaticamente
-- executar as operações CRUD das Feature Flags
+Internet
+
+↓
+
+Internet Gateway
+
+↓
+
+Amazon EC2 (Flask + Gunicorn + Docker)
+
+↓
+
+Amazon RDS PostgreSQL
+
+Toda a comunicação entre a aplicação e o banco de dados ocorre utilizando a porta **5432**, sendo permitido acesso apenas através do **Security Group da EC2**, mantendo o banco privado.
 
 ---
 
-## Banco de Dados
+# Infraestrutura AWS
 
-Container PostgreSQL responsável pelo armazenamento persistente das Feature Flags.
+Foi criada uma instância Amazon EC2 executando Ubuntu Server.
 
-A persistência é realizada através do volume Docker:
+Nesta instância foram instalados:
 
-```
-postgres_data
-```
+- Docker
+- Docker Compose
+- PostgreSQL Client
+- Aplicação ToggleMaster
 
----
+A aplicação foi publicada utilizando Gunicorn escutando na porta **5000**.
 
-# Inicialização Automática
+Foi criado também um banco de dados Amazon RDS PostgreSQL responsável por armazenar todas as Feature Flags da aplicação.
 
-O arquivo `entrypoint.sh` aguarda o PostgreSQL ficar disponível antes de iniciar a aplicação.
-
-Após a conexão:
-
-1. verifica se o banco está acessível;
-2. executa:
-
-```
-flask init-db
-```
-
-3. cria automaticamente a tabela caso ela não exista;
-4. inicia o Gunicorn.
+O acesso ao banco foi restringido através dos Security Groups da AWS.
 
 ---
 
 # Banco de Dados
 
-Tabela criada automaticamente:
+O banco de dados utilizado é um Amazon RDS PostgreSQL.
 
-```sql
-CREATE TABLE IF NOT EXISTS flags (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) UNIQUE NOT NULL,
-    is_enabled BOOLEAN NOT NULL DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-```
+Após sua criação, foi realizada a migração da aplicação para utilizar o endpoint do RDS ao invés do banco PostgreSQL executado localmente em Docker.
 
----
+Foi validada a conexão utilizando o cliente **psql** diretamente pela instância EC2.
 
-# Endpoints Implementados
-
-## Health Check
-
-GET
-
-```
-/health
-```
-
-Resposta:
-
-```json
-{
-    "status":"ok"
-}
-```
-
----
-
-## Criar Feature Flag
-
-POST
-
-```
-/flags
-```
-
-Exemplo:
-
-```json
-{
-    "name":"nova-feature",
-    "is_enabled":true
-}
-```
-
----
-
-## Listar Feature Flags
-
-GET
-
-```
-/flags
-```
-
-Resposta:
-
-```json
-[
-    {
-        "name":"nova-feature",
-        "is_enabled":true
-    }
-]
-```
-
----
-
-## Consultar uma Feature Flag
-
-GET
-
-```
-/flags/nova-feature
-```
-
-Resposta:
-
-```json
-{
-    "name":"nova-feature",
-    "is_enabled":true
-}
-```
-
----
-
-## Atualizar Feature Flag
-
-PUT
-
-```
-/flags/nova-feature
-```
-
-Exemplo:
-
-```json
-{
-    "is_enabled":false
-}
-```
+Também foi executada a criação automática da tabela **flags** durante a inicialização da aplicação.
 
 ---
 
 # Docker
 
-A aplicação pode ser executada com apenas um comando:
+A aplicação foi executada utilizando Docker Compose.
 
-```bash
-docker compose up --build
-```
+Durante o deploy foi realizada a reconstrução da imagem da aplicação para utilizar o banco hospedado no Amazon RDS.
 
-Os containers iniciados são:
+O container inicia automaticamente executando:
 
-- app
-- postgres
-
-O banco é criado automaticamente.
-
----
-
-# Variáveis de Ambiente
-
-A aplicação utiliza as seguintes variáveis:
-
-```
-DB_HOST
-DB_NAME
-DB_USER
-DB_PASSWORD
-DB_PORT
-```
-
-Configuradas no arquivo:
-
-```
-docker-compose.yaml
-```
+- Verificação da disponibilidade do banco
+- Inicialização da tabela
+- Inicialização do Gunicorn
 
 ---
 
 # Testes Realizados
 
-Durante o desenvolvimento foram realizados os seguintes testes:
+Após o deploy foram realizados testes para validar o funcionamento da aplicação.
 
-- criação do banco PostgreSQL;
-- inicialização automática da tabela;
-- criação de Feature Flag;
-- consulta de todas as Feature Flags;
-- consulta individual;
-- atualização de Feature Flag;
-- verificação do endpoint `/health`;
-- validação da persistência utilizando Docker.
+Os seguintes endpoints foram testados com sucesso:
 
-Todos os testes foram executados com sucesso.
+- GET /health
+- GET /flags
+- POST /flags
+
+Os testes confirmaram que:
+
+- A aplicação estava acessível pela Internet.
+- O Gunicorn estava funcionando corretamente.
+- A aplicação conseguia conectar ao Amazon RDS.
+- As Feature Flags eram gravadas corretamente no banco de dados.
 
 ---
 
-# Considerações
+# Segurança
 
-A implementação atende aos requisitos propostos utilizando uma arquitetura simples baseada em containers Docker.
+Foram utilizados Security Groups para controlar os acessos aos serviços.
 
-A inicialização é automática, não sendo necessária nenhuma criação manual de tabelas ou configuração adicional do banco de dados após executar:
+### EC2
 
-```bash
-docker compose up --build
-```
+- SSH (22): permitido apenas para meu endereço IP.
+- HTTP (80): acesso público.
+- TCP 5000: acesso público para a aplicação.
 
-A API permanece disponível na porta:
+### Amazon RDS
 
-```
-http://localhost:5000
-```
+- PostgreSQL (5432): permitido apenas para o Security Group da EC2.
+
+Dessa forma, o banco de dados permanece inacessível diretamente pela Internet.
+
+---
+
+# Estimativa de Custos
+
+Foi utilizada a ferramenta **AWS Pricing Calculator** para estimar os custos da infraestrutura.
+
+Os serviços considerados foram:
+
+- Amazon EC2
+- Amazon RDS PostgreSQL
+
+A estimativa foi baseada na região **US East (N. Virginia)** e contempla o custo mensal da infraestrutura utilizada durante o desenvolvimento.
 
 ---
 
 # Repositório
 
-Projeto desenvolvido para a atividade prática da disciplina utilizando o repositório base disponibilizado pelo professor.
+Repositório do projeto:
+
+**https://github.com/JulioBenes/toggle-master-monolith**
+
+---
+
+# Conclusão
+
+O objetivo do desafio foi concluído com sucesso.
+
+Foi realizada a implantação da aplicação ToggleMaster em ambiente AWS utilizando Amazon EC2 e Amazon RDS PostgreSQL.
+
+A aplicação passou a utilizar um banco de dados gerenciado, mantendo a comunicação segura entre os serviços através de uma VPC e Security Groups.
+
+Todos os testes executados demonstraram o funcionamento correto da aplicação, incluindo a comunicação com o banco de dados, a criação das Feature Flags e a disponibilidade da API através da Internet.
+
+As evidências da implantação e dos testes realizados encontram-se demonstradas no vídeo de entrega.
